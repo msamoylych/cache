@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <context:annotation-config/>
+    <context:property-placeholder location="org/java/default.properties"/>
+
+    <bean id="cache1" class="org.java.cache.MemoryCache">
+        <constructor-arg name="size" value="${memory.cache.size}"/>
+    </bean>
+
+    <bean id="cache2" class="org.java.cache.DiskCache" autowire-candidate="false">
+        <constructor-arg name="rootPath" value="${disk.cache.folder}"/>
+        <constructor-arg name="size" value="${disk.cache.size}"/>
+    </bean>
+
+    <bean id="task" class="org.java.Task" scope="prototype"/>
+</beans>
