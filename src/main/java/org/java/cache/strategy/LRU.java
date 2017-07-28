@@ -9,25 +9,31 @@ import java.util.Objects;
  */
 public class LRU implements DiscardingStrategy {
 
-    private Timeline timeline = new Timeline();
+    private final Timeline timeline = new Timeline();
 
     @Override
-    public synchronized void update(String key) {
-        timeline.setLast(key);
-    }
-
-    @Override
-    public synchronized String getDiscarded() {
-        return timeline.getFirst();
-    }
-
-    @Override
-    public synchronized boolean compareAndRemoveDiscarded(String key) {
-        String discarded = getDiscarded();
-        if (Objects.equals(discarded, key)) {
-            timeline.remove(key);
-            return true;
+    public void update(String key) {
+        synchronized (timeline) {
+            timeline.setLast(key);
         }
-        return false;
+    }
+
+    @Override
+    public String getDiscarded() {
+        synchronized (timeline) {
+            return timeline.getFirst();
+        }
+    }
+
+    @Override
+    public boolean compareAndRemoveDiscarded(String key) {
+        synchronized (timeline) {
+            String discarded = getDiscarded();
+            if (Objects.equals(discarded, key)) {
+                timeline.remove(key);
+                return true;
+            }
+            return false;
+        }
     }
 }

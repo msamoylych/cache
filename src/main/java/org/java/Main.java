@@ -2,7 +2,7 @@ package org.java;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import java.util.concurrent.ExecutorService;
@@ -17,16 +17,15 @@ public class Main {
     private static final int TASK_COUNT = 100;
 
     public static void main(String[] args) {
-        try {
-            ApplicationContext context = new ClassPathXmlApplicationContext(CONTEXT_LOCATION);
+        try (ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(CONTEXT_LOCATION)) {
             for (int i = 0; i < TASK_COUNT; i++) {
                 Task task = context.getBean(Task.class);
                 EXECUTOR.execute(task);
             }
             EXECUTOR.shutdown();
             EXECUTOR.awaitTermination(1, TimeUnit.MINUTES);
-        } catch (Exception ex) {
-            LOGGER.error(ex.getMessage(), ex);
+        } catch (Throwable th) {
+            LOGGER.error(th.getMessage(), th);
         }
     }
 }
