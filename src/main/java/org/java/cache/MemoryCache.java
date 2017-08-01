@@ -20,27 +20,27 @@ public class MemoryCache extends HierarchicalCache {
     }
 
     @Override
-    protected void _put(String key, Serializable value) {
+    protected void doPut(String key, Serializable value) {
         cache.put(key, value);
     }
 
     @Override
-    protected Serializable _get(String key) {
+    protected Serializable doGet(String key) {
         return cache.get(key);
     }
 
     @Override
-    protected boolean _contains(String key) {
+    protected boolean contains(String key) {
         return cache.containsKey(key);
     }
 
     @Override
-    protected void _update(String key, Serializable value) {
+    protected void update(String key, Serializable value) {
         cache.put(key, value);
     }
 
     @Override
-    protected Serializable _remove(String key) {
+    protected Serializable remove(String key) {
         return cache.remove(key);
     }
 }

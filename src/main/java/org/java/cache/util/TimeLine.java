@@ -6,12 +6,9 @@ import java.util.Map;
 /**
  * Класс для сортировки элементов по времени последнего использования
  */
-@SuppressWarnings("unchecked")
-public class Timeline {
+public class TimeLine {
 
-    private static final int DEFAULT_CAPACITY = 1 << 10;
-    
-    private Map<String, Entry> map = new HashMap<>(DEFAULT_CAPACITY);
+    private final Map<String, Entry> map = new HashMap<>();
     private Entry first;
     private Entry last;
 
@@ -24,16 +21,13 @@ public class Timeline {
         }
 
         Entry entry = map.get(key);
-        if (entry != null) {
-            entry.touch();
-        } else {
+        if (entry == null) {
             entry = new Entry(key);
             map.put(key, entry);
         }
 
-        if (first == null && last == null) {
-            first = entry;
-            last = entry;
+        if (first == null) {
+            first = last = entry;
             return;
         }
 
@@ -42,13 +36,12 @@ public class Timeline {
         }
 
         if (entry.next != null) {
-            if (entry.prev== null) {
+            if (entry.prev != null) {
+                entry.prev.next = entry.next;
+                entry.next.prev = entry.prev;
+            } else {
                 first = entry.next;
                 first.prev = null;
-            } else {
-                Entry previous = entry.prev;
-                previous.next = entry.next;
-                entry.next.prev = entry.prev;
             }
             entry.next = null;
         }
@@ -79,8 +72,7 @@ public class Timeline {
         }
 
         if (entry == first && entry == last) {
-            first = null;
-            last = null;
+            first = last = null;
         } else if (entry == first) {
             first = first.next;
             first.prev = null;
@@ -94,27 +86,16 @@ public class Timeline {
     }
 
     /**
-     * Интерфейс для поддержки сортировки
+     * Класс для поддержки сортировки
      */
     private static class Entry {
-        final String key;
-        
-        Entry prev;
-        Entry next;
-        
-        long createTime;
-        long lastAccessTime;
+        private final String key;
 
-        Entry(String key) {
+        private Entry prev;
+        private Entry next;
+
+        private Entry(String key) {
             this.key = key;
-            
-            long currentTime = System.currentTimeMillis();
-            createTime = currentTime;
-            lastAccessTime = currentTime;
-        }
-        
-        void touch() {
-            lastAccessTime = System.currentTimeMillis();
         }
     }
 }

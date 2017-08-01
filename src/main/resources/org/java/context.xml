@@ -10,6 +10,7 @@
 
     <bean id="cache1" class="org.java.cache.MemoryCache">
         <constructor-arg name="size" value="${memory.cache.size}"/>
+        <property name="parent" ref="cache2"/>
     </bean>
 
     <bean id="cache2" class="org.java.cache.DiskCache" autowire-candidate="false">

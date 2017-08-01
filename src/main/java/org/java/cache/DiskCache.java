@@ -48,7 +48,7 @@ public class DiskCache extends HierarchicalCache {
     }
 
     @Override
-    protected void _put(String key, Serializable value) {
+    protected void doPut(String key, Serializable value) {
         // Определение подкаталога
         Path path = Paths.get(rootPath.toString());//, Integer.toString(fileNames.size() % FILES_IN_FOLDER));
         if (!Files.exists(path)) {
@@ -59,7 +59,7 @@ public class DiskCache extends HierarchicalCache {
             }
         }
 
-        // Генерация имени файла
+        // Генерация файла
         String fileName = UUID.randomUUID().toString();
         Path file;
         try {
@@ -75,24 +75,24 @@ public class DiskCache extends HierarchicalCache {
     }
 
     @Override
-    protected Serializable _get(String key) {
+    protected Serializable doGet(String key) {
         Path path = getFile(key, true);
         return FileUtils.readFile(path);
     }
 
     @Override
-    protected boolean _contains(String key) {
+    protected boolean contains(String key) {
         return fileNames.containsKey(key);
     }
 
     @Override
-    protected void _update(String key, Serializable value) {
+    protected void update(String key, Serializable value) {
         Path path = getFile(key, true);
         FileUtils.writeFile(path, value);
     }
 
     @Override
-    protected Serializable _remove(String key) {
+    protected Serializable remove(String key) {
         Path path = getFile(key, false);
         Serializable value = FileUtils.readFile(path);
         FileUtils.deleteFile(path);

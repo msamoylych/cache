@@ -1,6 +1,6 @@
 package org.java.cache.strategy;
 
-import org.java.cache.util.Timeline;
+import org.java.cache.util.TimeLine;
 
 import java.util.Objects;
 
@@ -9,28 +9,28 @@ import java.util.Objects;
  */
 public class LRU implements DiscardingStrategy {
 
-    private final Timeline timeline = new Timeline();
+    private final TimeLine timeLine = new TimeLine();
 
     @Override
     public void update(String key) {
-        synchronized (timeline) {
-            timeline.setLast(key);
+        synchronized (timeLine) {
+            timeLine.setLast(key);
         }
     }
 
     @Override
     public String getDiscarded() {
-        synchronized (timeline) {
-            return timeline.getFirst();
+        synchronized (timeLine) {
+            return timeLine.getFirst();
         }
     }
 
     @Override
     public boolean compareAndRemoveDiscarded(String key) {
-        synchronized (timeline) {
+        synchronized (timeLine) {
             String discarded = getDiscarded();
             if (Objects.equals(discarded, key)) {
-                timeline.remove(key);
+                timeLine.remove(key);
                 return true;
             }
             return false;

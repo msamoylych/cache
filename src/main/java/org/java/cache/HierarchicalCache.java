@@ -46,9 +46,9 @@ abstract class HierarchicalCache implements Cache {
         }
 
         synchronized (keyLock(key)) {
-            boolean contains = _contains(key);
+            boolean contains = contains(key);
             if (contains) {
-                _update(key, value);
+                update(key, value);
             } else {
                 if (size > 0) {
                     while (count.incrementAndGet() > size) {
@@ -61,7 +61,7 @@ abstract class HierarchicalCache implements Cache {
 
                         synchronized (keyLock(discardedKey)) {
                             if (strategy.compareAndRemoveDiscarded(discardedKey)) {
-                                Serializable discardedValue = _remove(discardedKey);
+                                Serializable discardedValue = remove(discardedKey);
                                 parent.put(discardedKey, discardedValue);
                                 count.decrementAndGet();
                             }
@@ -71,7 +71,7 @@ abstract class HierarchicalCache implements Cache {
                     count.incrementAndGet();
                 }
 
-                _put(key, value);
+                doPut(key, value);
             }
             strategy.update(key);
         }
@@ -84,7 +84,7 @@ abstract class HierarchicalCache implements Cache {
         }
 
         synchronized (keyLock(key)) {
-            Serializable value = _get(key);
+            Serializable value = doGet(key);
             if (value != null) {
                 strategy.update(key);
             } else {
@@ -98,15 +98,15 @@ abstract class HierarchicalCache implements Cache {
         }
     }
 
-    protected abstract void _put(String key, Serializable value);
+    protected abstract void doPut(String key, Serializable value);
 
-    protected abstract Serializable _get(String key);
+    protected abstract Serializable doGet(String key);
 
-    protected abstract boolean _contains(String key);
+    protected abstract boolean contains(String key);
 
-    protected abstract void _update(String key, Serializable value);
+    protected abstract void update(String key, Serializable value);
 
-    protected abstract Serializable _remove(String key);
+    protected abstract Serializable remove(String key);
 
     private Object keyLock(String key) {
         Object lock;
