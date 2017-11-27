@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <context:property-placeholder location="test.properties"/>
+
+    <bean id="lru" class="org.java.cache.strategy.LRU"/>
+    <bean id="lfu" class="org.java.cache.strategy.LFU" autowire-candidate="false"/>
+
+    <bean id="memoryCache" class="org.java.cache.MemoryCache">
+        <constructor-arg name="parent" ref="diskCache"/>
+        <constructor-arg name="properties">
+            <props>
+                <prop key="size">${memory.cache.size}</prop>
+                <prop key="strategy">${memory.cache.strategy}</prop>
+            </props>
+        </constructor-arg>
+    </bean>
+
+    <bean id="diskCache" class="org.java.cache.DiskCache" autowire-candidate="false">
+        <constructor-arg name="properties">
+            <props>
+                <prop key="size">${disk.cache.size}</prop>
+                <prop key="strategy">${disk.cache.strategy}</prop>
+                <prop key="rootPath">${disk.cache.rootPath}</prop>
+                <prop key="numberOfFolders">${disk.cache.numberOfFolders}</prop>
+                <prop key="hashLength">${disk.cache.hashLength}</prop>
+            </props>
+        </constructor-arg>
+    </bean>
+</beans>

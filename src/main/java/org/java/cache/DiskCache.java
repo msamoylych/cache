@@ -1,135 +1,107 @@
 package org.java.cache;
 
 import org.java.cache.util.FileUtils;
+import org.java.cache.util.HashUtils;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Properties;
 
 public class DiskCache extends HierarchicalCache {
 
-    private final static int DEFAULT_SIZE = 1000;
-    private final static int FILES_IN_FOLDER = 100;
+    private final static String ROOT_PATH = "rootPath";
+    private final static String DEFAULT_ROOT_PATH = "cache";
+    private final static String NUMBER_OF_FOLDERS = "numberOfFolders";
+    private final static String DEFAULT_NUMBER_OF_FOLDERS = "10";
+    private final static String HASH_LENGTH = "hashLength";
+    private final static String DEFAULT_HASH_LENGTH = "8";
 
-    private final ConcurrentHashMap<String, DiskCacheEntry> fileNames;
     private final Path rootPath;
+    private final int numberOfFolders;
+    private final int hashLength;
 
-    public DiskCache(String rootPath, int size) {
-        this(rootPath, size, null);
+    public DiskCache(Properties properties) {
+        this(null, properties);
     }
 
-    public DiskCache(String rootPath, int size, String strategy) {
-        super(size, strategy);
+    public DiskCache(AbstractCache parent, Properties properties) {
+        super(parent, properties);
 
-        fileNames = new ConcurrentHashMap<>(size > 0 ? size : DEFAULT_SIZE);
+        rootPath = Paths.get(properties.getProperty(ROOT_PATH, DEFAULT_ROOT_PATH));
+        numberOfFolders = Integer.parseInt(properties.getProperty(NUMBER_OF_FOLDERS, DEFAULT_NUMBER_OF_FOLDERS));
+        hashLength = Integer.parseInt(properties.getProperty(HASH_LENGTH, DEFAULT_HASH_LENGTH));
 
-        if (rootPath == null) {
-            rootPath = "";
+        if (numberOfFolders <= 0) {
+            throw new IllegalArgumentException("Property numberOfFolders must be greater than 0");
+        }
+        if (hashLength <= 0 || hashLength > 40) {
+            throw new IllegalArgumentException("Property hashLength must be within 0 and 40");
         }
 
+        initDirectories();
+    }
+
+    @Override
+    protected void doPut(String key, Serializable value) {
+        Path path = getFilePath(key);
+        FileUtils.writeFile(path, value);
+    }
+
+    @Override
+    protected Serializable doGet(String key) {
+        Path path = getFilePath(key);
+        return Files.exists(path) ? FileUtils.readFile(path) : null;
+    }
+
+    @Override
+    protected Serializable doRemove(String key) {
+        Path path = getFilePath(key);
+        if (Files.exists(path)) {
+            Serializable value = FileUtils.readFile(path);
+            FileUtils.deleteFile(path);
+            return value;
+        } else {
+            return null;
+        }
+    }
+
+    @Override
+    protected boolean contains(String key) {
+        Path path = getFilePath(key);
+        return Files.exists(path);
+    }
+
+    private void initDirectories() {
         try {
-            Path path = Paths.get(rootPath);
-            if (Files.exists(path)) {
-                if (!Files.isDirectory(path) || !Files.isReadable(path) || !Files.isWritable(path)) {
+            // Создание каталога кэша
+            if (Files.exists(rootPath)) {
+                if (!Files.isDirectory(rootPath) || !Files.isReadable(rootPath) || !Files.isWritable(rootPath)) {
                     throw new IllegalArgumentException("Path " + rootPath + " is inaccessible");
-                } else {
-                    this.rootPath = path;
                 }
+                FileUtils.clearDirectory(rootPath);
             } else {
-                this.rootPath = Files.createDirectories(path);
+                Files.createDirectories(rootPath);
+            }
+
+            // Создание подкатологов
+            for (int i = 0; i < numberOfFolders; i++) {
+                Path dir = rootPath.resolve(Integer.toHexString(i));
+                Files.createDirectory(dir);
             }
         } catch (IOException ex) {
             throw new IllegalArgumentException("Path " + rootPath + " is unavailable", ex);
         }
     }
 
-    @Override
-    protected void doPut(String key, Serializable value) {
-        // Определение подкаталога
-        Path path = Paths.get(rootPath.toString());//, Integer.toString(fileNames.size() % FILES_IN_FOLDER));
-        if (!Files.exists(path)) {
-            try {
-                path = Files.createDirectory(path);
-            } catch (IOException ex) {
-                throw new IllegalStateException("Can't create subdirectory", ex);
-            }
-        }
-
-        // Генерация файла
-        String fileName = UUID.randomUUID().toString();
-        Path file;
-        try {
-            file = Files.createFile(Paths.get(path.toString(), fileName));
-        } catch (IOException ex) {
-            throw new IllegalStateException("Can't create file", ex);
-        }
-
-        // Запись в файл
-        FileUtils.writeFile(file, value);
-
-        fileNames.put(key, new DiskCacheEntry(file.toString()));
-    }
-
-    @Override
-    protected Serializable doGet(String key) {
-        Path path = getFile(key, true);
-        return FileUtils.readFile(path);
-    }
-
-    @Override
-    protected boolean contains(String key) {
-        return fileNames.containsKey(key);
-    }
-
-    @Override
-    protected void update(String key, Serializable value) {
-        Path path = getFile(key, true);
-        FileUtils.writeFile(path, value);
-    }
-
-    @Override
-    protected Serializable remove(String key) {
-        Path path = getFile(key, false);
-        Serializable value = FileUtils.readFile(path);
-        FileUtils.deleteFile(path);
-        fileNames.remove(key);
-        return value;
-    }
-
-    /**
-     * Поиск файла
-     *
-     * @param key  ключ
-     * @param keep способ получение файла: {@code true} - оставить, {@code false} - удалить
-     * @return {@code Path} файла
-     */
-    private Path getFile(String key, boolean keep) {
-        // Поиск имени файла
-        DiskCacheEntry entry = keep ? fileNames.get(key) : fileNames.remove(key);
-        if (entry == null) {
-            throw new IllegalStateException("File name for key " + key + " not found");
-        }
-
-        // Поиск файла
-        String fileName = entry.fileName;
-        Path file = Paths.get(fileName);
-        if (!Files.exists(file)) {
-            throw new IllegalStateException("File " + fileName + " doesn't exists");
-        }
-
-        return file;
-    }
-
-    private static class DiskCacheEntry {
-
-        private String fileName;
-
-        private DiskCacheEntry(String fileName) {
-            this.fileName = fileName;
-        }
+    // Определение пути к файлу
+    private Path getFilePath(String key) {
+        // Определение каталога
+        String dir = Integer.toHexString(key.hashCode() % numberOfFolders);
+        // Определение имени файла
+        String name = HashUtils.sha1Hex(key).substring(0, hashLength);
+        return rootPath.resolve(dir).resolve(name);
     }
 }

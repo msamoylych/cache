@@ -1,145 +1,212 @@
 package org.java.cache;
 
 import org.java.cache.strategy.DiscardingStrategy;
-import org.java.cache.strategy.LFU;
-import org.java.cache.strategy.LRU;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.BeansException;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
 
 import java.io.Serializable;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Абстрактный многоуровневый кэш
  */
-abstract class HierarchicalCache implements Cache {
+abstract class HierarchicalCache extends AbstractCache implements ApplicationContextAware {
+    private final Logger LOGGER = LoggerFactory.getLogger(getClass());
 
-    private static final String DEFAULT_STRATEGY = "LRU";
+    private static final String STRATEGY = "strategy";
+    private static final String NAME = "name";
+    private static final String SIZE = "size";
+    private static final String DEFAULT_SIZE = "100";
 
-    private final ConcurrentHashMap<String, Object> parallelLockMap = new ConcurrentHashMap<>();
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    private final Lock workLock = lock.readLock();
+    private final Lock clearLock = lock.writeLock();
+    private final ConcurrentMap<String, Object> lockMap = new ConcurrentHashMap<>();
+    private final long lockMapCleanTimeout = Long.getLong("lockMapCleanTimeout", -1);
+    private final int lockMapCleanThreshold = Integer.getInteger("lockMapCleanThreshold", 1000);
+    private final AbstractCache parent;
+
+    private final String strategyId;
+    private DiscardingStrategy strategy;
+
     private final AtomicInteger count = new AtomicInteger(0);
 
-    private final int size;
-    private final DiscardingStrategy strategy;
+    final String name;
+    final int size;
 
-    private Cache parent = new NullCache();
+    HierarchicalCache(AbstractCache parent, Properties properties) {
+        this.parent = parent != null ? parent : NullCache.INSTANCE;
+        this.strategyId = properties.getProperty(STRATEGY);
+        this.name = System.getProperty(NAME, getClass().getSimpleName());
+        this.size = Integer.parseInt(properties.getProperty(SIZE, DEFAULT_SIZE));
 
-    protected HierarchicalCache(int size) {
-        this(size, null);
-    }
-
-    protected HierarchicalCache(int size, String strategy) {
-        if (strategy == null) {
-            strategy = DEFAULT_STRATEGY;
+        if (size <= 0) {
+            throw new IllegalArgumentException("Size must be greater than 0");
         }
 
-        this.size = size;
-        this.strategy = defineStrategy(strategy);
+        if (lockMapCleanTimeout > 0) {
+            startLockMapCleaner();
+        }
     }
 
     @Override
-    public void put(String key, Serializable value) {
+    public final void put(String key, Serializable value) {
         if (key == null) {
             throw new IllegalArgumentException("No key specified");
         }
-        if (value == null || size == 0) {
+
+        if (value == null) {
+            remove(key);
             return;
         }
 
-        synchronized (keyLock(key)) {
-            boolean contains = contains(key);
-            if (contains) {
-                update(key, value);
-            } else {
-                if (size > 0) {
+        LOGGER.trace("put - '{}'", key);
+
+        workLock.lock();
+        try {
+            synchronized (lock(key)) {
+                if (contains(key)) {
+                    strategy.update(key);
+                } else {
                     while (count.incrementAndGet() > size) {
                         count.decrementAndGet();
 
-                        String discardedKey = strategy.getDiscarded();
+                        String discardedKey = strategy.toDiscard();
                         if (discardedKey == null) {
                             continue;
                         }
 
-                        synchronized (keyLock(discardedKey)) {
-                            if (strategy.compareAndRemoveDiscarded(discardedKey)) {
-                                Serializable discardedValue = remove(discardedKey);
-                                parent.put(discardedKey, discardedValue);
+                        synchronized (lock(discardedKey)) {
+                            if (strategy.compareAndDiscard(discardedKey)) {
+                                Serializable discardedValue = doRemove(discardedKey);
                                 count.decrementAndGet();
+                                parent.put(discardedKey, discardedValue);
                             }
                         }
                     }
-                } else {
-                    count.incrementAndGet();
+                    strategy.add(key);
                 }
 
                 doPut(key, value);
             }
-            strategy.update(key);
+        } finally {
+            workLock.unlock();
         }
     }
 
     @Override
-    public Serializable get(String key) {
+    public final Serializable get(String key) {
         if (key == null) {
             throw new IllegalArgumentException("No key specified");
         }
 
-        synchronized (keyLock(key)) {
-            Serializable value = doGet(key);
-            if (value != null) {
-                strategy.update(key);
-            } else {
-                Serializable parentValue = parent.get(key);
-                if (parentValue != null) {
-                    value = parentValue;
-                    put(key, value);
+        LOGGER.trace("get - '{}'", key);
+
+        workLock.lock();
+        try {
+            synchronized (lock(key)) {
+                Serializable value = doGet(key);
+                if (value != null) {
+                    strategy.update(key);
+                } else {
+                    Serializable parentValue = parent.remove(key);
+                    if (parentValue != null) {
+                        value = parentValue;
+                        put(key, value);
+                    }
                 }
+                return value;
             }
-            return value;
+        } finally {
+            workLock.unlock();
         }
     }
 
-    protected abstract void doPut(String key, Serializable value);
-
-    protected abstract Serializable doGet(String key);
-
-    protected abstract boolean contains(String key);
-
-    protected abstract void update(String key, Serializable value);
-
-    protected abstract Serializable remove(String key);
-
-    private Object keyLock(String key) {
-        Object lock;
-        Object newLock = new Object();
-        lock = parallelLockMap.putIfAbsent(key, newLock);
-        if (lock == null) {
-            lock = newLock;
+    @Override
+    final Serializable remove(String key) {
+        if (key == null) {
+            throw new IllegalArgumentException("No key specified");
         }
-        return lock;
-    }
 
-    private static DiscardingStrategy defineStrategy(String strategy) {
-        switch (strategy) {
-            case "LRU":
-                return new LRU();
-            case "LFU":
-                return new LFU();
-            default:
-                throw new IllegalArgumentException("Unknown strategy: " + strategy);
+        LOGGER.trace("remove - '{}'", key);
+
+        workLock.lock();
+        try {
+            synchronized (lock(key)) {
+                Serializable value = doRemove(key);
+                if (value != null) {
+                    strategy.remove(key);
+                    count.decrementAndGet();
+                }
+                return value;
+            }
+        } finally {
+            workLock.unlock();
         }
     }
 
-    public void setParent(Cache parent) {
-        if (parent == null) {
-            throw new IllegalArgumentException("No parent specified");
-        }
-        this.parent = parent;
+    abstract void doPut(String key, Serializable value);
+
+    abstract Serializable doGet(String key);
+
+    abstract Serializable doRemove(String key);
+
+    abstract boolean contains(String key);
+
+    private Object lock(String key) {
+        return lockMap.computeIfAbsent(key, k -> new Object());
     }
 
-    /**
-     * Null cache: ничего не сохраняет - ничего не возвращает
-     */
-    private static class NullCache implements Cache {
+    private void startLockMapCleaner() {
+        Thread cleanThread = new Thread(() -> {
+            try {
+                for (; ; ) {
+                    Thread.sleep(lockMapCleanTimeout);
+
+                    if (lockMap.size() <= lockMapCleanThreshold) {
+                        continue;
+                    }
+
+                    clearLock.lock();
+                    try {
+                        lockMap.clear();
+                    } finally {
+                        clearLock.unlock();
+                    }
+                }
+            } catch (InterruptedException ex) {
+                LOGGER.warn("Thread interrupted");
+            }
+        });
+        cleanThread.setName(name + "MapCleaner");
+        cleanThread.setDaemon(true);
+        cleanThread.start();
+    }
+
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        if (strategyId != null) {
+            strategy = applicationContext.getBean(strategyId, DiscardingStrategy.class);
+        } else {
+            strategy = applicationContext.getBean(DiscardingStrategy.class);
+        }
+    }
+
+    /*
+         * Null cache: ничего не сохраняет - ничего не возвращает
+         */
+    private static class NullCache extends AbstractCache {
+        private static final AbstractCache INSTANCE = new NullCache();
+
         @Override
         public void put(String key, Serializable value) {
             // Do nothing
@@ -147,6 +214,11 @@ abstract class HierarchicalCache implements Cache {
 
         @Override
         public Serializable get(String key) {
+            return null;
+        }
+
+        @Override
+        Serializable remove(String key) {
             return null;
         }
     }

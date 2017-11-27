@@ -1,6 +1,7 @@
 package org.java.cache.util;
 
 import java.io.*;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -14,54 +15,35 @@ public final class FileUtils {
 
     /**
      * Запись объекта в файл
-     * @param path путь к файлу
+     *
+     * @param path  путь к файлу
      * @param value объект
      */
     public static void writeFile(Path path, Serializable value) {
-        // Сериализация
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        try (ObjectOutput out = new ObjectOutputStream(bos)) {
+        try (ObjectOutput out = new ObjectOutputStream(new BufferedOutputStream(Files.newOutputStream(path)))) {
             out.writeObject(value);
-            out.flush();
         } catch (IOException ex) {
-            throw new IllegalStateException("Can't serialize value", ex);
-        }
-
-        byte[] bytes = bos.toByteArray();
-
-        // Запись в файл
-        try {
-            Files.write(path, bytes);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Can't write file", ex);
+            throw new IllegalStateException("Can't write file: " + path, ex);
         }
     }
 
     /**
      * Чтение объекта из файла
+     *
      * @param path путь к файлу
      * @return объект
      */
     public static Serializable readFile(Path path) {
-        // Чтение файла
-        byte[] bytes;
-        try {
-            bytes = Files.readAllBytes(path);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Can't read file", ex);
-        }
-
-        // Десериализация
-        ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
-        try (ObjectInput in = new ObjectInputStream(bis)) {
+        try (ObjectInput in = new ObjectInputStream(new BufferedInputStream(Files.newInputStream(path)))) {
             return (Serializable) in.readObject();
         } catch (IOException | ClassCastException | ClassNotFoundException ex) {
-            throw new IllegalStateException("Can't deserialize value", ex);
+            throw new IllegalStateException("Can't read file: " + path, ex);
         }
     }
 
     /**
      * Удаление файла
+     *
      * @param path путь к файлу
      */
     public static void deleteFile(Path path) {
@@ -69,6 +51,24 @@ public final class FileUtils {
             Files.delete(path);
         } catch (IOException ex) {
             throw new IllegalStateException("Can't delete file", ex);
+        }
+    }
+
+    /**
+     * Очистка директории
+     *
+     * @param path путь к директории
+     */
+    public static void clearDirectory(Path path) {
+        try (DirectoryStream<Path> paths = Files.newDirectoryStream(path)) {
+            for (Path p : paths) {
+                if (Files.isDirectory(p)) {
+                    clearDirectory(p);
+                }
+                deleteFile(p);
+            }
+        } catch (IOException ex) {
+            throw new IllegalStateException("Can't clear directory", ex);
         }
     }
 }

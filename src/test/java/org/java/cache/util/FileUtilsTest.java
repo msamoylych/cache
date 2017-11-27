@@ -6,6 +6,7 @@ import org.testng.annotations.Test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.UUID;
 
 /**
@@ -15,8 +16,7 @@ public class FileUtilsTest {
 
     @Test
     public void testWriteFile() throws IOException {
-        Path path = Files.createTempFile(UUID.randomUUID().toString(), ".tmp");
-        Files.delete(path);
+        Path path = Paths.get(UUID.randomUUID().toString());
         String value = "Text";
 
         FileUtils.writeFile(path, value);
