@@ -98,10 +98,11 @@ public class DiskCache extends HierarchicalCache {
 
     // Определение пути к файлу
     private Path getFilePath(String key) {
-        // Определение каталога
+        // Определение подкаталога
         String dir = Integer.toHexString(key.hashCode() % numberOfFolders);
         // Определение имени файла
         String name = HashUtils.sha1Hex(key).substring(0, hashLength);
+
         return rootPath.resolve(dir).resolve(name);
     }
 }

@@ -40,14 +40,14 @@ class LFU extends AbstractStrategy<LFU.Entry> {
 
     static class Entry extends AbstractStrategy.Entry {
         private long addTime = System.currentTimeMillis();
-        private double useCount = 1;
+        private int useCount = 0;
 
         private Entry(String key) {
             super(key);
         }
 
         private double frequency() {
-            return useCount / (System.currentTimeMillis() - addTime);
+            return (double) useCount / (System.currentTimeMillis() - addTime);
         }
     }
 }

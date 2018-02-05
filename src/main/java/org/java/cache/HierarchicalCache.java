@@ -202,8 +202,8 @@ abstract class HierarchicalCache extends AbstractCache implements ApplicationCon
     }
 
     /*
-         * Null cache: ничего не сохраняет - ничего не возвращает
-         */
+     * Null cache: ничего не сохраняет - ничего не возвращает
+     */
     private static class NullCache extends AbstractCache {
         private static final AbstractCache INSTANCE = new NullCache();
 

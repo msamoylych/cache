@@ -19,13 +19,14 @@ public class CacheTest {
     private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(8);
     private static final String CONTEXT_LOCATION = "context.xml";
 
+    private static final int COUNT = 100_000;
+
     @Test
     public void test() throws Exception {
         try (ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(CONTEXT_LOCATION)) {
             Cache cache = context.getBean(Cache.class);
-            for (;;) {
+            for (int i = 0; i < COUNT; i++) {
                 EXECUTOR.submit(new Task(cache));
-                Thread.sleep(100);
             }
         } finally {
             EXECUTOR.shutdown();
@@ -39,23 +40,24 @@ public class CacheTest {
 
         private final Cache cache;
 
-        public Task(Cache cache) {
+        private Task(Cache cache) {
             this.cache = cache;
         }
 
         @Override
         public void run() {
             LOGGER.info("start - '{}'", num);
+            long start = System.nanoTime();
             Serializable value = cache.get(num);
             if (value == null) {
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(100);
                 } catch (InterruptedException ex) {
                     LOGGER.warn("interrupted");
                 }
                 cache.put(num, "value");
             }
-            LOGGER.info("end - '{}'", num);
+            LOGGER.info("end - '{}' in {} ns", num, System.nanoTime() - start);
         }
     }
 }
